@@ -1,10 +1,18 @@
+import javax.swing.JButton;
+
 public class Game {
     private char[][] board;
-    private char currentPlayer;
+    private JButton[][] buttons;
+    private boolean gameOver;
+    private Player player1;
+    private Player player2;
 
-    public Game() {
+    public Game(JButton[][] buttons, Player player1, Player player2) {
+        this.buttons = buttons;
+        this.player1 = player1;
+        this.player2 = player2;
         board = new char[3][3];
-        currentPlayer = 'X';
+        gameOver = false;
 
         for (int i = 0; i < 3; i++) {
             for (int j = 0; j < 3; j++) {
@@ -13,11 +21,24 @@ public class Game {
         }
     }
 
-    public boolean makeMove(int row, int col) {
+    public void setGameOver(boolean gameOver) {
+        this.gameOver = gameOver;
+    }
+
+    public boolean isGameOver() {
+        return gameOver;
+    }
+
+    public boolean makeMove(int row, int col, Player player) {
         if (row >= 0 && col >= 0 && row < 3 && col < 3) {
             if (board[row][col] == '-') {
-                board[row][col] = currentPlayer;
-                currentPlayer = (currentPlayer == 'X') ? 'O' : 'X';
+                board[row][col] = player.getSymbol();
+                updateButton(row, col, player);
+                if (checkWinner()) {
+                    gameOver = true;
+                } else if (isBoardFull()) {
+                    gameOver = true;
+                }
                 return true;
             }
         }
@@ -30,21 +51,21 @@ public class Game {
                 return true;
             }
         }
-    
+
         for (int i = 0; i < 3; i++) {
             if (board[0][i] == board[1][i] && board[1][i] == board[2][i] && board[0][i] != '-') {
                 return true;
             }
         }
-    
+
         if (board[0][0] == board[1][1] && board[1][1] == board[2][2] && board[0][0] != '-') {
             return true;
         }
-    
+
         if (board[0][2] == board[1][1] && board[1][1] == board[2][0] && board[0][2] != '-') {
             return true;
         }
-    
+
         return false;
     }
 
@@ -65,12 +86,14 @@ public class Game {
         return true;
     }
 
-    public char getCurrentPlayer() {
-        return currentPlayer;
+    public char getBoardState(int row, int col) {
+        if (row >= 0 && col >= 0 && row < 3 && col < 3) {
+            return board[row][col];
+        }
+        return '-';
     }
 
-    public void setCurrentPlayer(char currentPlayer) {
-        this.currentPlayer = currentPlayer;
+    public void updateButton(int x, int y, Player player) {
+        buttons[x][y].setText(String.valueOf(player.getSymbol()));
     }
-
 }
