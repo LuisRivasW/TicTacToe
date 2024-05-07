@@ -12,9 +12,6 @@ import java.net.URI;
 import java.net.URISyntaxException;
 
 public class Main {
-    private Player player;
-    private Player[] players = new Player[2];
-
     public static void main(String[] args) {
         Main main = new Main();
         main.startGame();
@@ -35,16 +32,9 @@ public class Main {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(300, 300);
 
-        players[0] = new Player("PLAYER 1", 'X');
-        players[1] = new Player("PLAYER 2", 'O');
-        player = players[0];
+        JLabel statusLabel = new JLabel("Esperando al otro jugador...");
 
-        JLabel statusLabel = new JLabel(player.getName() + " turno (simbolo " + player.getSymbol() + ")");
-
-        Game game = new Game(buttons, players[0], players[1]);
-
-        TicTacToeWebSocketClient client = new TicTacToeWebSocketClient(serverUri, game, players, frame, statusLabel,
-                buttons);
+        TicTacToeWebSocketClient client = new TicTacToeWebSocketClient(serverUri, frame, statusLabel, buttons);
 
         JPanel panel = new JPanel();
         panel.setLayout(new GridLayout(3, 3));
@@ -61,8 +51,8 @@ public class Main {
 
                 button.addActionListener(new ActionListener() {
                     public void actionPerformed(ActionEvent e) {
-                        if (button.getText().equals("") && !game.isGameOver()) {
-                            handleMove(finalI, finalJ, button, client, game, buttons, frame, statusLabel);
+                        if (button.getText().equals("")) {
+                            handleMove(finalI, finalJ, button, client, buttons, frame, statusLabel);
                         }
                     }
                 });
@@ -73,55 +63,31 @@ public class Main {
         frame.add(panel);
         frame.setVisible(true);
         client.connect();
+
+        String[] options = { "Unirse a una sala de juego", "Crear una nueva sala de juego" };
+        int response = JOptionPane.showOptionDialog(null, "¿Qué quieres hacer?", "Inicio del juego",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, options, options[0]);
+
+        if (response == 0) {
+            String gameID = JOptionPane
+                    .showInputDialog("Introduce el ID de la sala de juego a la que te quieres unir:");
+            client.joinGame(gameID);
+        } else if (response == 1) {
+            String gameID = JOptionPane
+                    .showInputDialog("Introduce el ID de la nueva sala de juego que quieres crear:");
+            client.createGame(gameID);
+        }
     }
 
-    private void handleMove(int x, int y, JButton button, TicTacToeWebSocketClient client, Game game,
-            JButton[][] buttons, JFrame frame, JLabel statusLabel) {
+    private void handleMove(int x, int y, JButton button, TicTacToeWebSocketClient client, JButton[][] buttons,
+            JFrame frame, JLabel statusLabel) {
         for (JButton[] row : buttons) {
             for (JButton b : row) {
                 b.setEnabled(false);
             }
         }
 
-        String message = "MOVE " + player.getName() + " " + x + " " + y;
+        String message = "MOVE " + x + " " + y;
         client.send(message);
-        button.setText(String.valueOf(player.getSymbol()));
-
-        game.makeMove(x, y, player);
-
-        if (game.checkWinner()) {
-            String loser = (player == players[0]) ? players[1].getName() : players[0].getName();
-            String winnerMessage = player.getName() + " HA GANADO";
-            String serverMessage = "GAME OVER " + loser + ", " + winnerMessage;
-            endGame(winnerMessage, serverMessage, client, game, frame);
-        } else if (game.isBoardFull()) {
-            endGame("Es un empate!", "GAME OVER, ES UN EMPATE", client, game, frame);
-        }
-
-        if (player == players[0]) {
-            player = players[1];
-        } else {
-            player = players[0];
-        }
-        statusLabel.setText(player.getName() + " turno (símbolo " + player.getSymbol() + ")");
-
-        for (JButton[] row : buttons) {
-            for (JButton b : row) {
-                b.setEnabled(true);
-            }
-        }
-    }
-
-    private void endGame(String message, String serverMessage, TicTacToeWebSocketClient client, Game game,
-            JFrame frame) {
-        client.send(serverMessage);
-        JOptionPane.showMessageDialog(frame, message);
-        game.setGameOver(true);
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException ex) {
-            ex.printStackTrace();
-        }
-        client.close();
     }
 }

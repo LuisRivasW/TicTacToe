@@ -6,18 +6,13 @@ import java.net.URI;
 import java.util.Arrays;
 
 public class TicTacToeWebSocketClient extends WebSocketClient {
-    private Game game;
-    private Player[] players;
-    private Player player;
     private JFrame frame;
     private JLabel statusLabel;
     private JButton[][] buttons;
+    private boolean isPlayer1;
 
-    public TicTacToeWebSocketClient(URI serverUri, Game game, Player[] players, JFrame frame, JLabel statusLabel,
-            JButton[][] buttons) {
+    public TicTacToeWebSocketClient(URI serverUri, JFrame frame, JLabel statusLabel, JButton[][] buttons) {
         super(serverUri);
-        this.game = game;
-        this.players = players;
         this.frame = frame;
         this.statusLabel = statusLabel;
         this.buttons = buttons;
@@ -26,21 +21,24 @@ public class TicTacToeWebSocketClient extends WebSocketClient {
     @Override
     public void onOpen(ServerHandshake handshakedata) {
         System.out.println("Conexión abierta");
-        send("Uniendome al juego");
     }
 
     @Override
     public void onMessage(String message) {
         System.out.println("Mensaje recibido: " + message);
 
-        if (message.startsWith("UPDATE ")) {
-            handleUpdateMessage(message.substring(7));
-        } else if (message.equals("PLAYER 1")) {
-            player = players[0];
-        } else if (message.equals("PLAYER 2")) {
-            player = players[1];
-        } else {
-            handleOtherMessage(message);
+        try {
+            if (message.startsWith("UPDATE ")) {
+                handleUpdateMessage(message.substring(7));
+            } else if (message.startsWith("JOINED GAME ")) {
+                handleJoinedGameMessage(message.substring(12));
+            } else if (message.startsWith("CREATED GAME ")) {
+                handleCreatedGameMessage(message.substring(13));
+            } else {
+                handleOtherMessage(message);
+            }
+        } catch (Exception e) {
+            System.out.println("Error al procesar el mensaje: " + e.getMessage());
         }
     }
 
@@ -58,45 +56,77 @@ public class TicTacToeWebSocketClient extends WebSocketClient {
         });
     }
 
+    private void handleJoinedGameMessage(String gameID) {
+        System.out.println("Te has unido a la sala de juego con ID: " + gameID);
+        isPlayer1 = false;
+    }
+
+    private void handleCreatedGameMessage(String gameID) {
+        System.out.println("Has creado la sala de juego con ID: " + gameID);
+        isPlayer1 = true;
+    }
+
     private void handleOtherMessage(String message) {
         String[] parts = message.split(" ");
         if (parts.length == 4 && parts[0].equals("MOVE")) {
-            handleMoveMessage(parts);
+            try {
+                handleMoveMessage(parts);
+            } catch (NumberFormatException e) {
+                System.out.println("Error al procesar el mensaje MOVE: " + e.getMessage());
+            }
         } else if (parts.length == 4 && parts[0].equals("GAME") && parts[1].equals("OVER")) {
             handleGameOverMessage(parts);
+        } else {
+            System.out.println("Mensaje desconocido: " + message);
         }
     }
 
     private void handleMoveMessage(String[] parts) {
-        Player playerInMessage = Player.valueOf(parts[1]);
         int x = Integer.parseInt(parts[2]);
         int y = Integer.parseInt(parts[3]);
+        char symbol = parts[1].charAt(0);
 
-        if (!playerInMessage.equals(player) && x >= 0 && y >= 0 && x < 3 && y < 3) {
-            game.makeMove(x, y, playerInMessage);
-            buttons[x][y].setText(String.valueOf(playerInMessage.getSymbol()));
-            if (game.isGameOver()) {
-                send("GAME OVER");
-            }
-            if (player == players[0]) {
-                player = players[1];
-            } else {
-                player = players[0];
-            }
-            statusLabel.setText(player.getName() + " turno (símbolo " + player.getSymbol() + ")");
+        if (x < 0 || x > 2 || y < 0 || y > 2 || buttons[x][y].getText().length() > 0) {
+            System.out.println("Movimiento inválido: " + Arrays.toString(parts));
+            return;
         }
+
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                buttons[x][y].setText(String.valueOf(symbol));
+                char nextPlayer = symbol == 'X' ? 'O' : 'X';
+                statusLabel.setText("Turno de " + nextPlayer);
+                if ((nextPlayer == 'X' && isPlayer1) || (nextPlayer == 'O' && !isPlayer1)) {
+                    for (JButton[] row : buttons) {
+                        for (JButton button : row) {
+                            button.setEnabled(true);
+                        }
+                    }
+                }
+            }
+        });
     }
 
     private void handleGameOverMessage(String[] parts) {
-        if (parts[2].equals("DRAW")) {
-            JOptionPane.showMessageDialog(frame, "Es un empate!");
-        } else {
-            String winner = String.join(" ", Arrays.copyOfRange(parts, 2, parts.length));
-            JOptionPane.showMessageDialog(frame, winner);
-        }
-        game.setGameOver(true);
-        statusLabel.setText("Juego terminado");
-        close();
+        String winner = parts[2];
+
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                if (winner.equals("DRAW")) {
+                    statusLabel.setText("El juego termino en empate");
+                } else {
+                    String reason = parts[3];
+                    statusLabel.setText("El juego ha terminado. Ganador: " + winner + ", Razon: " + reason);
+                }
+                for (JButton[] row : buttons) {
+                    for (JButton button : row) {
+                        button.setEnabled(false);
+                    }
+                }
+            }
+        });
     }
 
     @Override
@@ -109,5 +139,13 @@ public class TicTacToeWebSocketClient extends WebSocketClient {
         System.out.println("Error: " + ex.getMessage());
         JOptionPane.showMessageDialog(frame, "Se produjo un error: " + ex.getMessage());
 
+    }
+
+    public void joinGame(String gameID) {
+        send("JOIN GAME " + gameID);
+    }
+
+    public void createGame(String gameID) {
+        send("CREATE GAME " + gameID);
     }
 }
